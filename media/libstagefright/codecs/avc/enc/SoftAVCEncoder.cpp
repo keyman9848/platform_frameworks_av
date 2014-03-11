@@ -57,7 +57,6 @@ static LevelConversion ConversionTable[] = {
     { OMX_VIDEO_AVCLevel12, AVC_LEVEL1_2 },
     { OMX_VIDEO_AVCLevel13, AVC_LEVEL1_3 },
     { OMX_VIDEO_AVCLevel2,  AVC_LEVEL2 },
-#if 0
     // encoding speed is very poor if video
     // resolution is higher than CIF
     { OMX_VIDEO_AVCLevel21, AVC_LEVEL2_1 },
@@ -70,7 +69,6 @@ static LevelConversion ConversionTable[] = {
     { OMX_VIDEO_AVCLevel42, AVC_LEVEL4_2 },
     { OMX_VIDEO_AVCLevel5,  AVC_LEVEL5   },
     { OMX_VIDEO_AVCLevel51, AVC_LEVEL5_1 },
-#endif
 };
 
 static status_t ConvertOmxAvcLevelToAvcSpecLevel(
@@ -181,7 +179,7 @@ SoftAVCEncoder::SoftAVCEncoder(
       mStoreMetaDataInBuffers(false),
       mIDRFrameRefreshIntervalInSec(1),
       mAVCEncProfile(AVC_BASELINE),
-      mAVCEncLevel(AVC_LEVEL2),
+      mAVCEncLevel(AVC_LEVEL3_1), // up to 720p @ 30 FPS
       mNumInputFrames(-1),
       mPrevTimestampUs(-1),
       mStarted(false),
@@ -528,6 +526,33 @@ OMX_ERRORTYPE SoftAVCEncoder::internalGetParameter(
 
             profileLevel->eProfile = OMX_VIDEO_AVCProfileBaseline;
             profileLevel->eLevel = ConversionTable[profileLevel->nProfileIndex].omxLevel;
+
+            return OMX_ErrorNone;
+        }
+
+        case OMX_IndexParamPortDefinition:
+        {
+            OMX_PARAM_PORTDEFINITIONTYPE *def =
+                (OMX_PARAM_PORTDEFINITIONTYPE *)params;
+
+            if (def->nPortIndex > 1) {
+                return OMX_ErrorUndefined;
+            }
+
+            OMX_ERRORTYPE err = SimpleSoftOMXComponent::internalGetParameter(index, params);
+            if (OMX_ErrorNone != err) {
+                return err;
+            }
+
+            def->format.video.nFrameWidth = mVideoWidth;
+            def->format.video.nFrameHeight = mVideoHeight;
+
+            // XXX: For now just configure input and output buffers the same size.
+            // May want to determine a more suitable output buffer size independent
+            // of YUV format.
+            CHECK(mVideoColorFormat == OMX_COLOR_FormatYUV420Planar ||
+                    mVideoColorFormat == OMX_COLOR_FormatYUV420SemiPlanar);
+            def->nBufferSize = mVideoWidth * mVideoHeight * 3 / 2;
 
             return OMX_ErrorNone;
         }

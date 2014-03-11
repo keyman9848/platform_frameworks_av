@@ -42,6 +42,7 @@
 #include <camera/ICamera.h>
 #include <camera/CameraParameters.h>
 #include <gui/Surface.h>
+#include <cutils/properties.h>
 
 #include <utils/Errors.h>
 #include <sys/types.h>
@@ -173,7 +174,18 @@ status_t StagefrightRecorder::setVideoEncoder(video_encoder ve) {
     }
 
     if (ve == VIDEO_ENCODER_DEFAULT) {
-        mVideoEncoder = VIDEO_ENCODER_H263;
+        char prop[PROPERTY_VALUE_MAX];
+        property_get("ro.video.encoder.default", prop, "");
+        if (strcmp(prop, "h263") == 0) {
+            mVideoEncoder = VIDEO_ENCODER_H263;
+        } else if (strcmp(prop, "h264") == 0) {
+            mVideoEncoder = VIDEO_ENCODER_H264;
+        } else if (strcmp(prop, "m4v") == 0) {
+            mVideoEncoder = VIDEO_ENCODER_MPEG_4_SP;
+        } else {
+            ALOGE_IF(prop[0], "Invalid ro.video.encoder.default property, expect one of h263,h264,m4v");
+            mVideoEncoder = VIDEO_ENCODER_H263;
+        }
     } else {
         mVideoEncoder = ve;
     }
@@ -205,6 +217,7 @@ status_t StagefrightRecorder::setVideoFrameRate(int frames_per_second) {
 
     // Additional check on the frame rate will be performed later
     mFrameRate = frames_per_second;
+    mUserSetupFrameRate = true;
 
     return OK;
 }
@@ -1364,7 +1377,7 @@ status_t StagefrightRecorder::setupCameraSource(
 
     // When frame rate is not set, the actual frame rate will be set to
     // the current frame rate being used.
-    if (mFrameRate == -1) {
+    if (mFrameRate == -1 || !mUserSetupFrameRate) {
         int32_t frameRate = 0;
         CHECK ((*cameraSource)->getFormat()->findInt32(
                     kKeyFrameRate, &frameRate));
@@ -1704,6 +1717,7 @@ status_t StagefrightRecorder::reset() {
     mCameraSourceTimeLapse = NULL;
     mIsMetaDataStoredInVideoBuffers = false;
     mEncoderProfiles = MediaProfiles::getInstance();
+    mUserSetupFrameRate = false;
     mRotationDegrees = 0;
     mLatitudex10000 = -3600000;
     mLongitudex10000 = -3600000;

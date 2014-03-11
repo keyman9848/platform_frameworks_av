@@ -149,7 +149,10 @@ OMX_ERRORTYPE SoftMPEG4Encoder::initEncParams() {
 
     if (mVideoColorFormat == OMX_COLOR_FormatYUV420SemiPlanar) {
         // Color conversion is needed.
-        CHECK(mInputFrameData == NULL);
+        /* 'mInputFrameData' could be used to store metadata,
+           it might be allocated before encoder initialized,
+           reset it before using it. */
+        delete mInputFrameData;
         mInputFrameData =
             (uint8_t *) malloc((mVideoWidth * mVideoHeight * 3 ) >> 1);
         CHECK(mInputFrameData != NULL);

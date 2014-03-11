@@ -42,8 +42,25 @@
 #include <utils/String8.h>
 
 #include <cutils/properties.h>
+#include <cutils/log.h>
+
+#include <dlfcn.h>
 
 namespace android {
+
+static void *loadExtractorPlugin() {
+    void *ret = NULL;
+    char lib[PROPERTY_VALUE_MAX];
+    if (property_get("media.stagefright.extractor-plugin", lib, "libFFmpegExtractor.so")) {
+        if (void *extractorLib = ::dlopen(lib, RTLD_LAZY)) {
+            ret = ::dlsym(extractorLib, "getExtractorPlugin");
+            ALOGW_IF(!ret, "Failed to find symbol, dlerror: %s", ::dlerror());
+        } else {
+            ALOGV("Failed to load %s, dlerror: %s", lib, ::dlerror());
+        }
+    }
+    return ret;
+}
 
 bool DataSource::getUInt16(off64_t offset, uint16_t *x) {
     *x = 0;
@@ -169,6 +186,7 @@ void DataSource::RegisterDefaultSniffers() {
     RegisterSniffer_l(SniffAAC);
     RegisterSniffer_l(SniffMPEG2PS);
     RegisterSniffer_l(SniffWVM);
+    RegisterSnifferPlugin();
 
     char value[PROPERTY_VALUE_MAX];
     if (property_get("drm.service.enabled", value, NULL)
@@ -176,6 +194,20 @@ void DataSource::RegisterDefaultSniffers() {
         RegisterSniffer_l(SniffDRM);
     }
     gSniffersRegistered = true;
+}
+
+// static
+void DataSource::RegisterSnifferPlugin() {
+    static void (*getExtractorPlugin)(MediaExtractor::Plugin *) =
+            (void (*)(MediaExtractor::Plugin *))loadExtractorPlugin();
+
+    MediaExtractor::Plugin *plugin = MediaExtractor::getPlugin();
+    if (!plugin->sniff && getExtractorPlugin) {
+        getExtractorPlugin(plugin);
+    }
+    if (plugin->sniff) {
+        RegisterSniffer_l(plugin->sniff);
+    }
 }
 
 // static
